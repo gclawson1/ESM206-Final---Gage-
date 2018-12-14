@@ -1,0 +1,448 @@
+---
+title: "ESM 206 Final Exam"
+author: "Gage Clawson"
+date: "12/6/2018"
+output: 
+  html_document:
+    theme: spacelab
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE, message = FALSE}
+#Load packages
+library(tidyverse)
+library(RColorBrewer)
+library(lubridate)
+library(corrplot)
+library(stargazer)
+library(forcats)
+library(effsize)
+library(knitr)
+library(kableExtra)
+library(plotly)
+library(extrafont)
+library(pwr)
+library(ggpubr)
+library(car)
+library(vcdExtra)
+library(kableExtra)
+library(data.table) 
+library(janitor)
+```
+
+```{r, echo = FALSE, message=FALSE}
+#read in data sets
+climate_opinion <- read_csv("climate_opinion.csv")
+ucsb_climate <- read_csv("ucsb_climate_cleaned.csv")
+pest_res <- read_csv("PesticideResidues.csv")
+ca_pest <- read_csv("ca_county_pesticides.csv")
+tmas_df <- read_csv("tmas_df.csv")
+
+```
+
+## {.tabset .tabset-fade .tabset-pills}
+
+### Task 1 {.tabset} 
+**Climate Change Opinions (Yale Program on Climate Change Communication)**
+
+ 
+
+  **a.** Multiple linear regression was conducted to assess the relationships between variables regarding climate change opinions for residents of the United States ($\alpha$ = 0.05 unless otherwise indicated). 
+ 
+  
+ 
+  **b.** Exploratory correlation matrix for all continuous variables. 
+<div align = "center">
+```{r, echo = FALSE}
+#can use discuss since it falls under information exposure
+
+#make correlation matrix with all continuous variables
+climate_cor <- cor(climate_opinion[2:7])
+
+#put these correlation values into a plot
+corrplot.mixed(climate_cor,
+               number.cex = 0.7, 
+               upper = "ellipse", 
+               tl.col = "black",
+               tl.pos = "d",
+               tl.cex = 0.75)
+```
+
+
+<div align = "left">
+  **c.**
+ 
+```{r, include = FALSE}
+# saturated model
+
+op_lm1 <- lm(happening ~ consensus + discuss + mediaweekly + bachelors + poverty_rate + coastline, data = climate_opinion)
+summary(op_lm1)
+
+plot(op_lm1)
+#diagnostic plots seems okay. No signs of heteroscedascity and residuals are relatively normally distributed. 
+
+vif(op_lm1)
+#concerned about consensus and discuss, may want to look into these. 
+
+#consensus and happening are very highly correlated. Should remove consensus considering if people believe scientists belive climate change, people probably also believe climate change and vice versa. 
+
+op_lm2 <- lm(happening ~ discuss + mediaweekly + bachelors + poverty_rate + coastline, data = climate_opinion)
+summary(op_lm2)
+
+plot(op_lm2)
+#diagnostic plots seems okay. No signs of heteroscedascity and residuals are relatively normally distributed. 
+
+vif(op_lm2)
+#discuss is still a bit concerning. It is also highly correlated with happening. The more you discuss global warming, the more likely you are aware it is happening. discuss and mediaweekly collinear. discuss also collinear with dependent variable, meaning that dependent variable could be derived from discuss. 
+
+op_lm5 <- lm(happening ~ consensus + mediaweekly + bachelors + poverty_rate + coastline, data = climate_opinion)
+summary(op_lm5)
+vif(op_lm5)
+
+#consensus and bachelors collinear. Consensus also collinear w dependent variable. Dependent variable probably derived from consensus. 
+
+#use model without consensus or discuss. Both causing collinearity problems. 
+op_lm3 <- lm(happening ~ mediaweekly + bachelors + poverty_rate + coastline, data = climate_opinion)
+summary(op_lm3)
+plot(op_lm3)
+#plots look ok. Not crazy heteroscedacitity, if any. Residuals are normally distributed.
+
+vif(op_lm3)
+# YAY, dont need to worry about anymore. Think this might be the correct model. Lets think about interactive terms anyways. 
+
+ggplot(aes(x = bachelors, y = happening, color = coastline), data = climate_opinion) +
+  geom_point() + 
+  geom_smooth(aes(bachelors, happening, color = coastline), method = lm, se = FALSE)
+#coastline doesn't seem to effect these variables. Slopes are pretty much the same. Nothing drastic. Lets check with media and poverty rate
+
+ggplot(aes(x = mediaweekly, y = happening, color = coastline), data = climate_opinion) +
+  geom_point() + 
+  geom_smooth(aes(mediaweekly, happening, color = coastline), method = lm, se = FALSE)
+#same thing here. Slopes are not drastically different. 
+
+ggplot(aes(x = poverty_rate, y = happening, color = coastline), data = climate_opinion) +
+  geom_point() + 
+  geom_smooth(aes(poverty_rate, happening, color = coastline), method = lm, se = FALSE)
+#WHOAAAA. Maybe should check this out. 
+
+op_lm4 <- lm(happening ~ mediaweekly + bachelors + poverty_rate + coastline + poverty_rate*coastline, data = climate_opinion)
+summary(op_lm4)
+#does this make any sense at all??
+plot(op_lm4)
+#not bad heteroscedacity. Residuals are normal.
+
+vif(op_lm4)
+#this poses problems. maybe just go with no interactive term here. 
+
+AIC(op_lm1)
+#122.4518
+AIC(op_lm2)
+#212.6063
+AIC(op_lm3)
+#243.0707
+AIC(op_lm4)
+#243.3045
+AIC(op_lm5)
+#136.5576
+
+# although model 3 has the highest AIC, I believe it makes the most sense to use model 3 due to collinearity concerns of discuss and consensus, as well as the output actually making sense for model 3. 
+```
+
+
+**Table 1. Regression Results.** The table shows relationships between each variable, and the dependent variable, Percentage Global Warming Believers. Data used with permission from the Yale Program on Climate Change Communication (Yale Climate Opinion Maps 2018).            
+<div align="center">
+```{r stargazer, results = 'asis', echo = FALSE}
+#create and format stargazer table in html 
+stargazer(op_lm3, type = "html", style = "qje", align = TRUE, covariate.labels=c("Weekly Media Exposure","Percentage Bachelor Degrees", "Poverty Rate", "State With Coastline: Yes"), dep.var.labels = "Percentage Global Warming Believers", single.row = TRUE)
+```
+<div align = "left">
+
+
+  
+  **d.** 
+ 
+  - The coefficient of "State With Coastline: Yes" explains that if every other variable in the model stayed constant, for states with a coastline, the proportion who believe in climate change is on average 3.54% more than states without a coastline. 
+  - The coefficient of "Poverty Rate"" explains that if every other variable in the model stayed constant, a 1% increase in poverty rate increases the proportion of people who believe in climate change by 0.372%. 
+
+  **e.** The residuals are normally distributed within the regression model. Heteroscedasticity is not a concern according to diagnostic plots. 
+ 
+ 
+<div align = "left">
+
+\ 
+
+
+### Task 2 {.tabset}
+**UCSB Campus Climate Survey - Perceptions of Campus Respectfulness by Respondent Race/Ethnicity**
+
+
+
+  **a.** To determine if there is a significant association between the race/ethnicity and perception of campus respect, a chi-squared test was performed on the number of counts for each perception category. 
+ 
+
+```{r, include = FALSE}
+
+ucsb_climate1 <- select(ucsb_climate, -Race)  # delete Race column
+
+rownames(ucsb_climate1) <- c("African American/African/Black", "American Indian/Alaskan Native", "Asian/Asian American", "Hispanic/Latino", "Middle Eastern/South Asian/North African", "Pacific Islander", "White")   # name rows as races
+
+ucsb_climate_prop <- prop.table(as.matrix(ucsb_climate1), 1)  #create proportion table
+
+ucsb_climate_x2 <- chisq.test(ucsb_climate1)   #perform chisquare test
+
+ucsb_climate_x2 
+```
+
+
+
+  **b.** Based on the data from a survey of UCSB responsdents regarding campus respect (Very Respectful, Respectful, Disrespectful, and Very Disrespectful) by ethnicity African American/African/Black (n=6791), American Indian/Alaskan Native (n=6095), Asian/Asian American (n=6942), Hispanic/Latino (n=6954), Middle Eastern/South Asian/North African (n=6621), Pacific Islander (n=6366), and White (n=7426); the campus climate opinions of survey respondents differed significantly by race (x^2^(18) = 1489.6, *p*<0.001, $\alpha$ = 0.05).
+
+  **c.**
+  
+```{r, echo = FALSE, include = FALSE}
+
+#make proportion table a data frame
+ucsb_climate_prop1 <- as.data.frame(ucsb_climate_prop)
+
+#make the rownames a column instead so we can merge with regular ucsb_climate counts
+ucsb_climate_prop2 <- setDT(ucsb_climate_prop1, keep.rownames = TRUE)[] 
+
+#Round values in prop data
+ucsb_climate_prop2 <- mutate(ucsb_climate_prop2, 
+                                 `Very Respectful` = round(`Very Respectful` , 3),
+                                 Respectful = round(Respectful , 3), 
+                                 Disrespectful = round(Disrespectful , 3), 
+                                 `Very Disrespectful` = round(`Very Disrespectful` , 3))
+#make column 1 name "Race"
+colnames(ucsb_climate_prop2)[1] <- c("Race")
+
+
+#join the datasets together
+table_ucsb_climate <- full_join(ucsb_climate, ucsb_climate_prop2)
+
+#put parentheses around each proportion values
+table_ucsb_climate$`Very Respectful` <- with(table_ucsb_climate, case_when(
+  `Very Respectful`  < 1 ~ paste0("(", `Very Respectful`, ")"), 
+  `Very Respectful`  > 1 ~ paste0(`Very Respectful`)))
+
+table_ucsb_climate$Respectful <- with(table_ucsb_climate, case_when(
+  Respectful  < 1 ~ paste0("(", Respectful, ")"), 
+  Respectful  > 1 ~ paste0(Respectful)))
+
+table_ucsb_climate$Disrespectful <- with(table_ucsb_climate, case_when(
+  Disrespectful  < 1 ~ paste0("(", Disrespectful, ")"), 
+  Disrespectful  > 1 ~ paste0(Disrespectful)))
+
+table_ucsb_climate$`Very Disrespectful` <- with(table_ucsb_climate, case_when(
+  `Very Disrespectful`  < 1 ~ paste0("(", `Very Disrespectful`, ")"), 
+  `Very Disrespectful`  > 1 ~ paste0(`Very Disrespectful`)))
+
+#bring the proportions into the same cell as the counts!!!
+matches <- table_ucsb_climate %>%
+  group_by(Race) %>%
+  dplyr::summarise(`Very Respectful` = paste(`Very Respectful`, collapse = " "), Respectful = paste(Respectful, collapse = " "), Disrespectful = paste(Disrespectful, collapse = " "), `Very Disrespectful` = paste(`Very Disrespectful`, collapse = " "))
+
+#add totals to matches data
+matches <- matches %>%
+  mutate(Race = case_when(
+    Race == "African American/African/Black" ~ "African American/African/Black (n = 6791)",
+    Race == "American Indian/Alaskan Native" ~ "American Indian/Alaskan Native (n = 6095)", 
+    Race == "Asian/Asian American" ~ "Asian/Asian American (n = 6942)", 
+    Race == "Hispanic/Latino" ~ "Hispanic/Latino (n = 6954)",
+    Race == "Middle Eastern/South Asian/North African" ~ "Middle Eastern/South Asian/North African (n = 6621)",
+    Race == "Pacific Islander" ~ "Pacific Islander (n = 6366)", 
+    Race == "White" ~ "White (n = 7426)"
+  ))
+
+```
+
+```{r, echo = FALSE}
+kable(matches, col.names = c("Race/Ethnicity", "Very Respectful", "Respectful", "Disrespectful", "Very Disrespectful"), caption = "Table 2. Counts and Proportions of Perceived Campus Respect according to Race/Ethnicity. Data used with permission from Ranklin & Associates Consulting (Ranklin & Associates, 2014).") %>%
+  add_header_above(c(" "=1, "Perceived Campus Respect Counts and Proportions" = 4)) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "bordered"), position = "center", full_width = TRUE)
+  
+
+```
+
+
+  **d.** Respondents identifying as White have a much higher rate of response for "Very Respectful" than any other Race/Ethnicity. Particularly, the proportion of respondents identifying as White who perceive the campus as being "Very Respectful" is nearly 20% more than those who identify as African American/African/Black. Overall, about 60% of respondents in each category other than "White" believe that the campus is "Respectful". 
+
+\ 
+
+
+### Task 3 {.tabset}
+**Effect of sex and age on self-consciousness (Taylor Manifest Anxiety Scale)**
+
+```{r, include=FALSE}
+#make response variable binary
+cleaned_tmas <- tmas_df %>%
+  mutate(response = case_when(
+    response == "True" ~ 1,
+    response == "False" ~ 0 
+    ))
+
+#run logistic regression
+taylor_blr <- glm(response ~ sex_mf + age, family = "binomial", data = cleaned_tmas)
+
+summary(taylor_blr)
+```
+
+
+  **a.**
+  
+**Table 3: Logistic Regression Results.** Binomial logistic regression results show relationships between Sex and Age, and the dependent variable, Self-Consciousness. Data used with permission from Open Psychometrics (Taylor Manifest Anxiety Scale). 
+<div align = "center">
+```{r stargazer1, results = 'asis', echo = FALSE, fig.show = 'hold', out.width='50%'}
+stargazer(taylor_blr, type = "html", style = "qje", align = TRUE, covariate.labels=c("Sex - Male","Age"), dep.var.labels = "Self-Consciousness", single.row = TRUE)
+
+```
+<div align = "left">
+\ 
+
+  **b.**
+```{r, include = FALSE}
+seq_age <- rep(seq(from = 0, to = 100), 2) # Create a sequence from 0 to 100, twice (one will be "Male" and one will be "Female")
+f_101 <- rep("Female", 101) # Repeat 'Female' 101 times (to match years data)
+m_101 <- rep("Male", 101) # Repeat 'Male' 101 times
+mf_101 <- c(f_101, m_101) # Combine them into a single vector
+# Combine the age and sex sequences into a single data frame - that will be the new data that we have our model make predictions for
+taylor_newdata <- data.frame(seq_age, mf_101) # MUST make column names match variables in the model!
+colnames(taylor_newdata) <- c("age","sex_mf")
+
+# Find probabilities using predict (with type = "response"). Include SE.
+age_probs <- predict(taylor_blr, newdata = taylor_newdata, type = "response", se.fit = TRUE)
+
+#force data into being a dataframe
+graph_data <- data.frame(taylor_newdata, age_probs) %>%
+  select(-residual.scale)
+
+# rename columnds
+colnames(graph_data) <- c("Age", "Sex", "Probability", "SE")
+
+```  
+
+<div align = "center">
+ 
+```{r taylor_graph, echo = FALSE}
+ggplot(aes(x = Age, y = Probability), data = graph_data) +
+  geom_line(aes(color = Sex)) +
+  geom_ribbon(aes(ymin = Probability - SE, ymax = Probability + SE, fill = Sex), alpha = 0.3) +
+  theme_classic() +
+  labs(x = "Age", y = "Probability of Self-Consciousness", title  = "Probability of Self-Consciousness by Age") +
+  scale_x_continuous(expand = c(0,0), limits = c(0,100)) +
+  scale_y_continuous(expand = c(0,0), limits = c(0,1)) +
+  theme_light() +
+  theme(legend.title = element_blank())
+
+```
+  
+<div align = "left">
+  **c.** The above graph shows that male and females have close to the same probabilities of self-consciousness as age increases. Males are slightly less likely to be self-conscious than females overall, and as age increases, the probability of self-conciousness decreases, which aligns with the results found in Table 3.
+  
+\ 
+
+
+###Task 4 {.tabset}
+**Pyraclostrobin residues on crops** 
+
+  **a.** To determine the appropriate test, tests for normality were conducted. As shown in the graphs below, both the histograms and qqplots of each sample indicated non-normal distributions. 
+
+```{r, echo = FALSE, fig.show = 'hold', out.width='50%', results = 'hide'}
+#test to complete for t tests: Look at normality and sample size. If shape is normal, use t test even if n < 30. If n > 30 and shape not normal, still okay to use t-test because of CLT. Otherwise, we must use a non parametric test.
+
+pest_res1 <- pest_res %>%
+  clean_names() %>%
+  select(commodity, chemical_detected_if_any, amount_of_chemical_detected_ppm) %>%
+  filter(commodity %in%  c("STRAWBERRY (ALL OR UNSPEC)", "CARROTS (ROOT CROP)"), chemical_detected_if_any == "PYRACLOSTROBIN") %>%
+  rename(pyra_conc = amount_of_chemical_detected_ppm, chemical_detected = chemical_detected_if_any)
+
+#test for normality 
+pest_bins <- 2*(55)^(1/3)
+
+pest_hist <- ggplot(pest_res1, aes(x = pyra_conc)) +
+  geom_histogram(bins = pest_bins) +
+  facet_wrap(~commodity, scale = "free") 
+
+pest_hist
+
+pest_qq <- ggplot(pest_res1, aes(sample = pyra_conc)) +
+  geom_qq() +
+  facet_wrap(~commodity) 
+
+pest_qq
+
+## both not normally distributed. 
+## Carrots have sample size 15 while strawberry have sample size 40. Both need to be above 30 to assume CLT. 
+
+## This indicates that these samples are non parametric. This would mean to use Mann Whitney U test for ranks. 
+
+
+```
+  Both of the sample sizes are small. Strawberries have a sample size of 40, while Carrots have a sample   size of 15. This makes it impossible to assume normality through the Central Limit Theorem. Due to the   results of normality testing, it is concluded that the samples are non parametric. A Mann Whitney U      test for ranks will be conducted. 
+
+```{r, include= FALSE}
+#Null: there is not a significant difference in ranks of pesticide for carrots and strawberries
+#Alt: there is a significiant difference
+
+mwu_pest <- pest_res1 %>%
+wilcox.test(pyra_conc ~ commodity, data =.)
+
+mwu_pest
+
+pest_delta <- pest_res1 %>% 
+  cliff.delta(pyra_conc~ commodity, data = . )
+pest_delta
+
+# there is a significant different in ranks of pesticide for carrots and strawberries. 
+
+```
+
+
+  **b.** Non-parametric Mann Whitney U Test for data collected from Carrots (n=15) and Strawberries (n=40) in California during 2014 revealed that the pyraclostrobin concentration (ppm) differs significantly between Carrots and Strawberries (W=91.5, *p*<0.0001). Also, a large effect size is observed (Cliff's delta = 0.695), meaning that ranks of pyraclostrobin concentration (ppm) among Strawberries are mostly greater than ranks of pyraclostrobin concentration (ppm) among Carrots. Data used with permission from the California Department of Pesticide Regulation (California Department of Pesticide Regulation). 
+
+\ 
+
+  
+###Task 5 {.tabset}
+**Pesticides by County, California (2014)**
+
+```{r}
+per_sq_mile <- ca_pest %>%
+  clean_names() %>%
+  mutate(pounds_per_sq_mile = pounds_active_pesticide_ingredient_used/county_area_square_miles) %>%
+  top_n(10, pounds_per_sq_mile) # get top ten values of pounds per sq mile
+
+pest_col <- ggplot(aes(x = reorder(county, -pounds_per_sq_mile) , y = pounds_per_sq_mile), data = per_sq_mile) +
+  geom_col(aes(fill = county), show.legend = FALSE) +
+  theme_light() +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1)) +
+  scale_x_discrete(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0), limits = c(0,9000), breaks = seq(0,9000, by = 1000)) + 
+  labs(x = "County", y = "Pesticide Ingredient (Pounds per Square Mile)", title = "Top 10 California Counties by Pesticide Ingredient (Pounds Per Square Mile)") +
+  scale_fill_brewer(palette = "Spectral")
+
+pest_col
+ 
+```
+
+\ 
+
+###References {.tabset}
+
+- California Department of Pesticide Regulation. (2014). Pesticide Residue Monitoring Program. Retrieved from https://www.cdpr.ca.gov/docs/enforce/residue/rsmonmnu.htm 
+
+- California Department of Pesticide Regulation. (2014). Pounds of Active Ingredient by County. Retrieved from https://www.cdpr.ca.gov/docs/pur/pur14rep/14_pur.htm
+
+- Marlon, J., Howe, P., Mildenberger, M., Leiserowitz, A., & Wang, X. (2018). Yale Climate Opinion Maps 2018. Retrieved from http://climatecommunication.yale.edu/visualizations-data/ycom-us-2018/?est=happening&type=value&geo=county
+
+- Ranklin & Associates, Consulting (2014, March). UCSB Campus Climate Project Final Report. Retrieved from http://diversity.ucsb.edu/CampusClimate/
+
+- Taylor Manifest Anxiety Scale. (n.d.). Retrieved from https://openpsychometrics.org/tests/TMAS/
+
+
+
+
